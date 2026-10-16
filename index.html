@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -368,6 +369,12 @@
         }
 
         function handleLogout() {
+            // Stop real-time listener
+            if (reportsListener) {
+                reportsListener();
+                reportsListener = null;
+            }
+            
             currentUser = null;
             isAdmin = false;
             document.getElementById('loginScreen').classList.remove('hidden');
@@ -391,6 +398,12 @@
             document.getElementById('tabMetrics').classList.remove('border-blue-500', 'text-blue-600');
             document.getElementById('tabMetrics').classList.add('border-transparent', 'text-gray-500');
 
+            // Stop metrics listener when leaving metrics tab
+            if (tab !== 'metrics' && metricsListener) {
+                metricsListener();
+                metricsListener = null;
+            }
+
             if (tab === 'reports') {
                 document.getElementById('reportsTab').classList.remove('hidden');
                 document.getElementById('tabReports').classList.add('border-blue-500', 'text-blue-600');
@@ -408,28 +421,40 @@
             }
         }
 
-        // Load reports
-        async function loadReports() {
+        // Load reports (real-time listener)
+        let reportsListener = null;
+
+        function loadReports() {
             document.getElementById('loadingReports').classList.remove('hidden');
             document.getElementById('reportsTable').classList.add('hidden');
             document.getElementById('noReports').classList.add('hidden');
 
-            try {
-                const snapshot = await db.collection('reports').orderBy('createdAt', 'desc').get();
-                reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                if (reports.length === 0) {
-                    document.getElementById('noReports').classList.remove('hidden');
-                } else {
-                    renderReports(reports);
-                    document.getElementById('reportsTable').classList.remove('hidden');
-                }
-            } catch (error) {
-                console.error('Error loading reports:', error);
-                alert('Error al cargar los reportes');
-            } finally {
-                document.getElementById('loadingReports').classList.add('hidden');
+            // Remove existing listener if any
+            if (reportsListener) {
+                reportsListener();
             }
+
+            // Set up real-time listener
+            reportsListener = db.collection('reports')
+                .orderBy('createdAt', 'desc')
+                .onSnapshot((snapshot) => {
+                    reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    if (reports.length === 0) {
+                        document.getElementById('noReports').classList.remove('hidden');
+                        document.getElementById('reportsTable').classList.add('hidden');
+                    } else {
+                        renderReports(reports);
+                        document.getElementById('noReports').classList.add('hidden');
+                        document.getElementById('reportsTable').classList.remove('hidden');
+                    }
+                    
+                    document.getElementById('loadingReports').classList.add('hidden');
+                }, (error) => {
+                    console.error('Error loading reports:', error);
+                    alert('Error al cargar los reportes');
+                    document.getElementById('loadingReports').classList.add('hidden');
+                });
         }
 
         function renderReports(reportsToRender) {
@@ -527,6 +552,7 @@
                 document.getElementById('reportSeverity').value = '';
                 document.getElementById('reportDescription').value = '';
                 showTab('reports');
+                // No need to call loadReports() - the real-time listener will update automatically
             } catch (error) {
                 console.error('Error creating report:', error);
                 alert('Error al crear el reporte');
@@ -604,42 +630,54 @@
         }
 
         function closeModal() {
+            // Stop comments listener
+            if (commentsListener) {
+                commentsListener();
+                commentsListener = null;
+            }
+            
             document.getElementById('reportModal').classList.add('hidden');
             currentReportId = null;
         }
 
-        // Comments
-        async function loadComments(reportId) {
-            try {
-                const snapshot = await db.collection('comments')
-                    .where('reportId', '==', reportId)
-                    .orderBy('createdAt', 'asc')
-                    .get();
-                
-                const comments = snapshot.docs.map(doc => doc.data());
-                const commentsList = document.getElementById('commentsList');
-                commentsList.innerHTML = '';
+        // Comments (real-time listener)
+        let commentsListener = null;
 
-                if (comments.length === 0) {
-                    commentsList.innerHTML = '<p class="text-gray-500 text-sm">No hay comentarios</p>';
-                } else {
-                    comments.forEach(comment => {
-                        const date = comment.createdAt ? new Date(comment.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
-                        const div = document.createElement('div');
-                        div.className = 'bg-gray-50 rounded-lg p-3';
-                        div.innerHTML = `
-                            <div class="flex justify-between items-start">
-                                <p class="text-sm font-medium text-gray-800">${comment.authorEmail}</p>
-                                <p class="text-xs text-gray-500">${date}</p>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-1">${comment.text}</p>
-                        `;
-                        commentsList.appendChild(div);
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading comments:', error);
+        function loadComments(reportId) {
+            // Remove existing listener if any
+            if (commentsListener) {
+                commentsListener();
             }
+
+            // Set up real-time listener
+            commentsListener = db.collection('comments')
+                .where('reportId', '==', reportId)
+                .orderBy('createdAt', 'asc')
+                .onSnapshot((snapshot) => {
+                    const comments = snapshot.docs.map(doc => doc.data());
+                    const commentsList = document.getElementById('commentsList');
+                    commentsList.innerHTML = '';
+
+                    if (comments.length === 0) {
+                        commentsList.innerHTML = '<p class="text-gray-500 text-sm">No hay comentarios</p>';
+                    } else {
+                        comments.forEach(comment => {
+                            const date = comment.createdAt ? new Date(comment.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
+                            const div = document.createElement('div');
+                            div.className = 'bg-gray-50 rounded-lg p-3';
+                            div.innerHTML = `
+                                <div class="flex justify-between items-start">
+                                    <p class="text-sm font-medium text-gray-800">${comment.authorEmail}</p>
+                                    <p class="text-xs text-gray-500">${date}</p>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">${comment.text}</p>
+                            `;
+                            commentsList.appendChild(div);
+                        });
+                    }
+                }, (error) => {
+                    console.error('Error loading comments:', error);
+                });
         }
 
         async function addComment() {
@@ -654,7 +692,7 @@
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 document.getElementById('newComment').value = '';
-                await loadComments(currentReportId);
+                // No need to call loadComments() - the real-time listener will update automatically
             } catch (error) {
                 console.error('Error adding comment:', error);
                 alert('Error al agregar comentario');
@@ -678,7 +716,7 @@
                 await db.collection('reports').doc(currentReportId).update(updateData);
                 alert('Estado actualizado exitosamente');
                 closeModal();
-                loadReports();
+                // No need to call loadReports() - the real-time listener will update automatically
             } catch (error) {
                 console.error('Error updating status:', error);
                 alert('Error al actualizar el estado');
@@ -703,45 +741,53 @@
 
                 alert('Reporte eliminado exitosamente');
                 closeModal();
-                loadReports();
+                // No need to call loadReports() - the real-time listener will update automatically
             } catch (error) {
                 console.error('Error deleting report:', error);
                 alert('Error al eliminar el reporte');
             }
         }
 
-        // Metrics
-        async function loadMetrics() {
+        // Metrics (real-time listener)
+        let metricsListener = null;
+
+        function loadMetrics() {
             document.getElementById('loadingMetrics').classList.remove('hidden');
             document.getElementById('metricsContent').classList.add('hidden');
 
-            try {
-                const snapshot = await db.collection('reports').get();
-                const allReports = snapshot.docs.map(doc => doc.data());
-
-                const total = allReports.length;
-                const open = allReports.filter(r => r.status === 'Abierto').length;
-                const inProgress = allReports.filter(r => r.status === 'En Proceso').length;
-                const resolved = allReports.filter(r => r.status === 'Resuelto' || r.status === 'Cerrado').length;
-                const highSeverity = allReports.filter(r => r.severity === 'Alta').length;
-                const mediumSeverity = allReports.filter(r => r.severity === 'Media').length;
-                const lowSeverity = allReports.filter(r => r.severity === 'Baja').length;
-
-                document.getElementById('metricTotal').textContent = total;
-                document.getElementById('metricOpen').textContent = open;
-                document.getElementById('metricInProgress').textContent = inProgress;
-                document.getElementById('metricResolved').textContent = resolved;
-                document.getElementById('metricHighSeverity').textContent = highSeverity;
-                document.getElementById('metricMediumSeverity').textContent = mediumSeverity;
-                document.getElementById('metricLowSeverity').textContent = lowSeverity;
-
-                document.getElementById('metricsContent').classList.remove('hidden');
-            } catch (error) {
-                console.error('Error loading metrics:', error);
-                alert('Error al cargar métricas');
-            } finally {
-                document.getElementById('loadingMetrics').classList.add('hidden');
+            // Remove existing listener if any
+            if (metricsListener) {
+                metricsListener();
             }
+
+            // Set up real-time listener
+            metricsListener = db.collection('reports')
+                .onSnapshot((snapshot) => {
+                    const allReports = snapshot.docs.map(doc => doc.data());
+
+                    const total = allReports.length;
+                    const open = allReports.filter(r => r.status === 'Abierto').length;
+                    const inProgress = allReports.filter(r => r.status === 'En Proceso').length;
+                    const resolved = allReports.filter(r => r.status === 'Resuelto' || r.status === 'Cerrado').length;
+                    const highSeverity = allReports.filter(r => r.severity === 'Alta').length;
+                    const mediumSeverity = allReports.filter(r => r.severity === 'Media').length;
+                    const lowSeverity = allReports.filter(r => r.severity === 'Baja').length;
+
+                    document.getElementById('metricTotal').textContent = total;
+                    document.getElementById('metricOpen').textContent = open;
+                    document.getElementById('metricInProgress').textContent = inProgress;
+                    document.getElementById('metricResolved').textContent = resolved;
+                    document.getElementById('metricHighSeverity').textContent = highSeverity;
+                    document.getElementById('metricMediumSeverity').textContent = mediumSeverity;
+                    document.getElementById('metricLowSeverity').textContent = lowSeverity;
+
+                    document.getElementById('metricsContent').classList.remove('hidden');
+                    document.getElementById('loadingMetrics').classList.add('hidden');
+                }, (error) => {
+                    console.error('Error loading metrics:', error);
+                    alert('Error al cargar métricas');
+                    document.getElementById('loadingMetrics').classList.add('hidden');
+                });
         }
     </script>
 </body>
