@@ -120,10 +120,29 @@
                     <div class="loader"></div>
                 </div>
                 
+                <!-- Bulk Actions Bar (Admin Only) -->
+                <div id="bulkActionsBar" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between admin-only">
+                    <span class="text-sm text-blue-800 font-medium" id="selectedCount">0 seleccionados</span>
+                    <div class="flex space-x-2">
+                        <button onclick="bulkCloseReports()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
+                            Cerrar Seleccionados
+                        </button>
+                        <button onclick="bulkDeleteReports()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700">
+                            Eliminar Seleccionados
+                        </button>
+                        <button onclick="clearSelection()" class="bg-gray-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-600">
+                            Limpiar Selección
+                        </button>
+                    </div>
+                </div>
+                
                 <div id="reportsTable" class="hidden overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider admin-only hidden">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                                </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
@@ -315,6 +334,7 @@
         let isAdmin = false;
         let currentReportId = null;
         let reports = [];
+        let selectedReports = new Set();
 
         // Login handling
         document.getElementById('isAdminCheck').addEventListener('change', function() {
@@ -374,6 +394,9 @@
                 reportsListener();
                 reportsListener = null;
             }
+            
+            // Clear selection
+            selectedReports.clear();
             
             currentUser = null;
             isAdmin = false;
@@ -464,7 +487,12 @@
             reportsToRender.forEach(report => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50 cursor-pointer';
-                row.onclick = () => openReportModal(report.id);
+                row.onclick = (e) => {
+                    // Don't open modal if clicking on checkbox or actions
+                    if (!e.target.closest('input[type="checkbox"]') && !e.target.closest('button')) {
+                        openReportModal(report.id);
+                    }
+                };
 
                 const severityColors = {
                     'Baja': 'bg-green-100 text-green-800',
@@ -481,7 +509,12 @@
 
                 const date = report.createdAt ? new Date(report.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
 
+                const isSelected = selectedReports.has(report.id);
+
                 row.innerHTML = `
+                    <td class="px-4 py-4 whitespace-nowrap text-sm admin-only ${isAdmin ? '' : 'hidden'}">
+                        <input type="checkbox" class="report-checkbox" data-id="${report.id}" ${isSelected ? 'checked' : ''} onchange="toggleReportSelection('${report.id}', this.checked)">
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.id.substring(0, 8)}...</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.type}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.location}</td>
@@ -503,6 +536,28 @@
                 `;
                 tbody.appendChild(row);
             });
+
+            // Show/hide admin-only elements
+            document.querySelectorAll('.admin-only').forEach(el => {
+                if (isAdmin) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+
+            // Hide select all checkbox for non-admin
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            if (selectAllCheckbox) {
+                if (isAdmin) {
+                    selectAllCheckbox.closest('th').classList.remove('hidden');
+                } else {
+                    selectAllCheckbox.closest('th').classList.add('hidden');
+                }
+            }
+
+            // Update bulk actions bar
+            updateBulkActionsBar();
         }
 
         function filterReports() {
@@ -526,6 +581,111 @@
                 document.getElementById('noReports').classList.add('hidden');
                 document.getElementById('reportsTable').classList.remove('hidden');
                 renderReports(filtered);
+            }
+        }
+
+        // Bulk selection functions
+        function toggleReportSelection(reportId, isSelected) {
+            if (isSelected) {
+                selectedReports.add(reportId);
+            } else {
+                selectedReports.delete(reportId);
+            }
+            updateBulkActionsBar();
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.report-checkbox');
+            
+            checkboxes.forEach(checkbox => {
+                const reportId = checkbox.dataset.id;
+                if (selectAllCheckbox.checked) {
+                    selectedReports.add(reportId);
+                    checkbox.checked = true;
+                } else {
+                    selectedReports.delete(reportId);
+                    checkbox.checked = false;
+                }
+            });
+            updateBulkActionsBar();
+        }
+
+        function clearSelection() {
+            selectedReports.clear();
+            document.querySelectorAll('.report-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateBulkActionsBar();
+        }
+
+        function updateBulkActionsBar() {
+            const bulkActionsBar = document.getElementById('bulkActionsBar');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            if (selectedReports.size > 0 && isAdmin) {
+                bulkActionsBar.classList.remove('hidden');
+                selectedCount.textContent = `${selectedReports.size} seleccionados`;
+            } else {
+                bulkActionsBar.classList.add('hidden');
+            }
+        }
+
+        async function bulkCloseReports() {
+            if (selectedReports.size === 0) return;
+            
+            if (!confirm(`¿Está seguro de cerrar ${selectedReports.size} reportes?`)) return;
+
+            try {
+                const batch = db.batch();
+                selectedReports.forEach(reportId => {
+                    const docRef = db.collection('reports').doc(reportId);
+                    batch.update(docRef, {
+                        status: 'Cerrado',
+                        resolvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                });
+                
+                await batch.commit();
+                alert(`${selectedReports.size} reportes cerrados exitosamente`);
+                clearSelection();
+            } catch (error) {
+                console.error('Error closing reports:', error);
+                alert('Error al cerrar los reportes');
+            }
+        }
+
+        async function bulkDeleteReports() {
+            if (selectedReports.size === 0) return;
+            
+            if (!confirm(`¿Está seguro de eliminar ${selectedReports.size} reportes? Esta acción no se puede deshacer.`)) return;
+
+            try {
+                // Delete reports and their comments
+                const batch = db.batch();
+                
+                for (const reportId of selectedReports) {
+                    // Delete report
+                    batch.delete(db.collection('reports').doc(reportId));
+                    
+                    // Delete associated comments
+                    const commentsSnapshot = await db.collection('comments')
+                        .where('reportId', '==', reportId)
+                        .get();
+                    
+                    commentsSnapshot.docs.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                }
+                
+                await batch.commit();
+                alert(`${selectedReports.size} reportes eliminados exitosamente`);
+                clearSelection();
+            } catch (error) {
+                console.error('Error deleting reports:', error);
+                alert('Error al eliminar los reportes');
             }
         }
 
