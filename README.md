@@ -6,16 +6,32 @@ Sistema web completo de gestión de eventos e incidentes para cámaras visuales 
 
 - **Frontend Web:** HTML5 + Tailwind CSS + Vanilla JS + Firebase SDK v9
 - **Base de Datos:** Firebase Firestore (Plan Gratuito Spark)
-- **Automatización:** GitHub Actions para reportes diarios automáticos
-- **Email:** Nodemailer/Resend para notificaciones
 - **Roles:** Operador (sin contraseña) y Administrador (con token)
 - **Diseño Responsivo:** Funciona en desktop, tablet y móvil
+- **Gestión en Tiempo Real:** Reportes y comentarios en tiempo real
+- **Opcional:** Automatización de emails (requiere plan Blaze)
 
 ## 📋 Requisitos Previos
 
 - Cuenta de GitHub
 - Cuenta de Google (para Firebase)
-- Cuenta de proveedor de email (Resend, SendGrid, o cualquier SMTP)
+
+## ⚠️ Nota Importante sobre Planes de Firebase
+
+**Plan Spark (Gratuito):**
+- ✅ Sistema web completamente funcional
+- ✅ Gestión de reportes en tiempo real
+- ❌ NO permite emails automáticos (limitación del plan)
+- ❌ NO permite conexiones desde servidores externos (GitHub Actions)
+
+**Plan Blaze (Pago por uso):**
+- ✅ Sistema web completamente funcional
+- ✅ Gestión de reportes en tiempo real
+- ✅ Emails automáticos diarios
+- ✅ Conexiones desde servidores externos
+- 💰 Puede seguir siendo gratuito dentro de los límites gratuitos
+
+Este proyecto está configurado inicialmente para el **Plan Spark**. Para habilitar los emails automáticos, necesitas actualizar al Plan Blaze.
 
 ---
 
@@ -422,14 +438,42 @@ GitHub Pages se actualizará automáticamente en ~1-2 minutos.
 
 ---
 
+## � Habilitar Emails Automáticos (Opcional - Requiere Plan Blaze)
+
+Si en el futuro deseas habilitar los reportes diarios por email, necesitas:
+
+### 1. Actualizar a Plan Blaze
+1. Ve a Firebase Console > Settings > Usage and billing
+2. Actualiza de Spark a Blaze
+3. Agrega método de pago (no se cobrará si te mantienes en límites gratuitos)
+
+### 2. Configurar Proveedor de Email
+- Regístrate en Resend, SendGrid, o usa SMTP
+- Configura las credenciales SMTP
+
+### 3. Configurar Secretos en GitHub Actions
+- Agrega todos los secretos de Firebase (FIREBASE_*)
+- Agrega secretos de email (SMTP_*, ADMIN_EMAIL, FROM_EMAIL)
+
+### 4. Verificar Permisos en Google Cloud
+- Asigna rol "Cloud Firestore Client" o "Editor" a la cuenta de servicio
+- Habilita APIs necesarias (Firestore, IAM, Cloud Resource Manager)
+
+Luego ejecuta el workflow manualmente para probar.
+
+Ver documentación completa en el README original para pasos detallados.
+
+---
+
 ## 📞 Soporte
 
 Si encuentras problemas:
 
-1. Revisa los logs de GitHub Actions
-2. Verifica la configuración de Firebase Console
-3. Revisa que todos los secretos estén correctos
-4. Consulta la documentación de [Firebase](https://firebase.google.com/docs) y [GitHub Actions](https://docs.github.com/en/actions)
+1. Verifica la configuración de Firebase Console
+2. Revisa que el token de administrador sea correcto en index.html
+3. Consulta la documentación de [Firebase](https://firebase.google.com/docs)
+
+**Nota:** Con el plan Spark, los emails automáticos no están disponibles. Para habilitarlos, actualiza al plan Blaze.
 
 ---
 
