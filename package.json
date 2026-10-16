@@ -1,0 +1,22 @@
+{
+  "name": "event-management-system",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de eventos e incidentes para cámaras visuales y equipos de red",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "event-management",
+    "firebase",
+    "github-actions",
+    "cameras",
+    "network"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "nodemailer": "^6.9.7"
+  }
+}

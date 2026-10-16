@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Eventos - Cámaras y Red</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Gestión de Eventos</h1>
+                <p class="text-gray-600">Cámaras Visuales y Equipos de Red</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico Corporativo</label>
+                    <input type="email" id="emailInput" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="usuario@empresa.com" required>
+                </div>
+                
+                <div id="adminTokenSection" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Código de Administrador</label>
+                    <input type="password" id="adminTokenInput" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••">
+                </div>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="isAdminCheck" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                    <label for="isAdminCheck" class="ml-2 text-sm text-gray-700">Soy Administrador</label>
+                </div>
+                
+                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
+                    Ingresar
+                </button>
+            </div>
+            
+            <div id="loginError" class="hidden mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm"></div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboardScreen" class="hidden min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">Gestión de Eventos</h1>
+                    <p class="text-sm text-gray-600" id="userEmailDisplay"></p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="roleBadge" class="px-3 py-1 rounded-full text-sm font-semibold"></span>
+                    <button onclick="handleLogout()" class="text-gray-600 hover:text-gray-800">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="bg-white border-b">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex space-x-8">
+                    <button onclick="showTab('reports')" id="tabReports" class="py-4 px-1 border-b-2 border-blue-500 text-blue-600 font-medium">
+                        Reportes
+                    </button>
+                    <button onclick="showTab('create')" id="tabCreate" class="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                        Crear Reporte
+                    </button>
+                    <button onclick="showTab('metrics')" id="tabMetrics" class="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium admin-only hidden">
+                        Métricas
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Reports Tab -->
+        <div id="reportsTab" class="max-w-7xl mx-auto px-4 py-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-800">Listado de Reportes</h2>
+                    <div class="flex space-x-2">
+                        <select id="filterStatus" onchange="filterReports()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="">Todos los Estados</option>
+                            <option value="Abierto">Abierto</option>
+                            <option value="En Proceso">En Proceso</option>
+                            <option value="Resuelto">Resuelto</option>
+                            <option value="Cerrado">Cerrado</option>
+                        </select>
+                        <select id="filterSeverity" onchange="filterReports()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="">Todas las Severidades</option>
+                            <option value="Baja">Baja</option>
+                            <option value="Media">Media</option>
+                            <option value="Alta">Alta</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="loadingReports" class="flex justify-center py-8">
+                    <div class="loader"></div>
+                </div>
+                
+                <div id="reportsTable" class="hidden overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severidad</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operador</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider admin-only hidden">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+                
+                <div id="noReports" class="hidden text-center py-8 text-gray-500">
+                    No hay reportes registrados
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Report Tab -->
+        <div id="createTab" class="hidden max-w-7xl mx-auto px-4 py-6">
+            <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto">
+                <h2 class="text-xl font-semibold text-gray-800 mb-6">Crear Nuevo Reporte</h2>
+                
+                <form onsubmit="createReport(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Sistema *</label>
+                        <select id="reportType" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Seleccione...</option>
+                            <option value="Cámara PTZ">Cámara PTZ</option>
+                            <option value="Cámara Fija">Cámara Fija</option>
+                            <option value="NVR/Almacenamiento">NVR/Almacenamiento</option>
+                            <option value="Switch/Conectividad">Switch/Conectividad</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Ubicación/Código del Equipo *</label>
+                        <input type="text" id="reportLocation" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ej: CAM-001, SW-FLOOR2">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Nivel de Severidad *</label>
+                        <select id="reportSeverity" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Seleccione...</option>
+                            <option value="Baja">Baja</option>
+                            <option value="Media">Media</option>
+                            <option value="Alta">Alta/Crítica</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Descripción Detallada del Problema *</label>
+                        <textarea id="reportDescription" required rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Describa el problema observado..."></textarea>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
+                        Crear Reporte
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Metrics Tab (Admin Only) -->
+        <div id="metricsTab" class="hidden max-w-7xl mx-auto px-4 py-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-6">Métricas del Sistema</h2>
+                
+                <div id="loadingMetrics" class="flex justify-center py-8">
+                    <div class="loader"></div>
+                </div>
+                
+                <div id="metricsContent" class="hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-blue-50 rounded-lg p-6">
+                            <p class="text-sm text-blue-600 font-medium">Total Reportes</p>
+                            <p id="metricTotal" class="text-3xl font-bold text-blue-800">0</p>
+                        </div>
+                        <div class="bg-yellow-50 rounded-lg p-6">
+                            <p class="text-sm text-yellow-600 font-medium">Abiertos</p>
+                            <p id="metricOpen" class="text-3xl font-bold text-yellow-800">0</p>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-6">
+                            <p class="text-sm text-purple-600 font-medium">En Proceso</p>
+                            <p id="metricInProgress" class="text-3xl font-bold text-purple-800">0</p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-6">
+                            <p class="text-sm text-green-600 font-medium">Resueltos</p>
+                            <p id="metricResolved" class="text-3xl font-bold text-green-800">0</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-red-50 rounded-lg p-6">
+                            <p class="text-sm text-red-600 font-medium">Severidad Alta</p>
+                            <p id="metricHighSeverity" class="text-3xl font-bold text-red-800">0</p>
+                        </div>
+                        <div class="bg-orange-50 rounded-lg p-6">
+                            <p class="text-sm text-orange-600 font-medium">Severidad Media</p>
+                            <p id="metricMediumSeverity" class="text-3xl font-bold text-orange-800">0</p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-6">
+                            <p class="text-sm text-green-600 font-medium">Severidad Baja</p>
+                            <p id="metricLowSeverity" class="text-3xl font-bold text-green-800">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Detail Modal -->
+        <div id="reportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold text-gray-800">Detalle del Reporte</h3>
+                        <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div id="modalContent" class="space-y-4"></div>
+                    
+                    <!-- Comments Section -->
+                    <div class="mt-6 pt-6 border-t">
+                        <h4 class="font-semibold text-gray-800 mb-3">Comentarios</h4>
+                        <div id="commentsList" class="space-y-3 mb-4"></div>
+                        
+                        <div class="flex space-x-2">
+                            <input type="text" id="newComment" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Agregar comentario...">
+                            <button onclick="addComment()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                Enviar
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Admin Actions -->
+                    <div id="adminActions" class="hidden mt-6 pt-6 border-t">
+                        <h4 class="font-semibold text-gray-800 mb-3">Acciones de Administrador</h4>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Cambiar Estado</label>
+                                <select id="changeStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <option value="Abierto">Abierto</option>
+                                    <option value="En Proceso">En Proceso</option>
+                                    <option value="Resuelto">Resuelto</option>
+                                    <option value="Cerrado">Cerrado</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button onclick="updateReportStatus()" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                                    Actualizar Estado
+                                </button>
+                            </div>
+                        </div>
+                        <button onclick="deleteReport()" class="mt-4 w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700">
+                            Eliminar Reporte
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCRxU0_8lynUoG3YMOWvQjlELQB0Zx78E",
+            authDomain: "event-management-system-8f5a2.firebaseapp.com",
+            projectId: "event-management-system-8f5a2",
+            storageBucket: "event-management-system-8f5a2.firebasestorage.app",
+            messagingSenderId: "666140533046",
+            appId: "1:666140533046:web:db3fa3d26384de3bd85397"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Admin token (replace with your secure token)
+        const ADMIN_TOKEN = "admin2024secure";
+
+        // State
+        let currentUser = null;
+        let isAdmin = false;
+        let currentReportId = null;
+        let reports = [];
+
+        // Login handling
+        document.getElementById('isAdminCheck').addEventListener('change', function() {
+            document.getElementById('adminTokenSection').classList.toggle('hidden', !this.checked);
+        });
+
+        function handleLogin() {
+            const email = document.getElementById('emailInput').value.trim();
+            const isAdminCheck = document.getElementById('isAdminCheck').checked;
+            const adminToken = document.getElementById('adminTokenInput').value;
+
+            if (!email || !email.includes('@')) {
+                showError('Por favor ingrese un correo válido');
+                return;
+            }
+
+            if (isAdminCheck) {
+                if (adminToken !== ADMIN_TOKEN) {
+                    showError('Código de administrador inválido');
+                    return;
+                }
+                isAdmin = true;
+            } else {
+                isAdmin = false;
+            }
+
+            currentUser = email;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboardScreen').classList.remove('hidden');
+            
+            document.getElementById('userEmailDisplay').textContent = email;
+            
+            const roleBadge = document.getElementById('roleBadge');
+            if (isAdmin) {
+                roleBadge.textContent = 'Administrador';
+                roleBadge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800';
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+            } else {
+                roleBadge.textContent = 'Operador';
+                roleBadge.className = 'px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800';
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+            }
+
+            loadReports();
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            isAdmin = false;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('dashboardScreen').classList.add('hidden');
+            document.getElementById('emailInput').value = '';
+            document.getElementById('adminTokenInput').value = '';
+            document.getElementById('isAdminCheck').checked = false;
+            document.getElementById('adminTokenSection').classList.add('hidden');
+        }
+
+        // Tab navigation
+        function showTab(tab) {
+            document.getElementById('reportsTab').classList.add('hidden');
+            document.getElementById('createTab').classList.add('hidden');
+            document.getElementById('metricsTab').classList.add('hidden');
+            
+            document.getElementById('tabReports').classList.remove('border-blue-500', 'text-blue-600');
+            document.getElementById('tabReports').classList.add('border-transparent', 'text-gray-500');
+            document.getElementById('tabCreate').classList.remove('border-blue-500', 'text-blue-600');
+            document.getElementById('tabCreate').classList.add('border-transparent', 'text-gray-500');
+            document.getElementById('tabMetrics').classList.remove('border-blue-500', 'text-blue-600');
+            document.getElementById('tabMetrics').classList.add('border-transparent', 'text-gray-500');
+
+            if (tab === 'reports') {
+                document.getElementById('reportsTab').classList.remove('hidden');
+                document.getElementById('tabReports').classList.add('border-blue-500', 'text-blue-600');
+                document.getElementById('tabReports').classList.remove('border-transparent', 'text-gray-500');
+                loadReports();
+            } else if (tab === 'create') {
+                document.getElementById('createTab').classList.remove('hidden');
+                document.getElementById('tabCreate').classList.add('border-blue-500', 'text-blue-600');
+                document.getElementById('tabCreate').classList.remove('border-transparent', 'text-gray-500');
+            } else if (tab === 'metrics') {
+                document.getElementById('metricsTab').classList.remove('hidden');
+                document.getElementById('tabMetrics').classList.add('border-blue-500', 'text-blue-600');
+                document.getElementById('tabMetrics').classList.remove('border-transparent', 'text-gray-500');
+                loadMetrics();
+            }
+        }
+
+        // Load reports
+        async function loadReports() {
+            document.getElementById('loadingReports').classList.remove('hidden');
+            document.getElementById('reportsTable').classList.add('hidden');
+            document.getElementById('noReports').classList.add('hidden');
+
+            try {
+                const snapshot = await db.collection('reports').orderBy('createdAt', 'desc').get();
+                reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                if (reports.length === 0) {
+                    document.getElementById('noReports').classList.remove('hidden');
+                } else {
+                    renderReports(reports);
+                    document.getElementById('reportsTable').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                alert('Error al cargar los reportes');
+            } finally {
+                document.getElementById('loadingReports').classList.add('hidden');
+            }
+        }
+
+        function renderReports(reportsToRender) {
+            const tbody = document.getElementById('reportsBody');
+            tbody.innerHTML = '';
+
+            reportsToRender.forEach(report => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 cursor-pointer';
+                row.onclick = () => openReportModal(report.id);
+
+                const severityColors = {
+                    'Baja': 'bg-green-100 text-green-800',
+                    'Media': 'bg-yellow-100 text-yellow-800',
+                    'Alta': 'bg-red-100 text-red-800'
+                };
+
+                const statusColors = {
+                    'Abierto': 'bg-red-100 text-red-800',
+                    'En Proceso': 'bg-yellow-100 text-yellow-800',
+                    'Resuelto': 'bg-blue-100 text-blue-800',
+                    'Cerrado': 'bg-green-100 text-green-800'
+                };
+
+                const date = report.createdAt ? new Date(report.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.id.substring(0, 8)}...</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.type}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.location}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${severityColors[report.severity]}">
+                            ${report.severity}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[report.status]}">
+                            ${report.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${report.operatorEmail}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium admin-only ${isAdmin ? '' : 'hidden'}">
+                        <button onclick="event.stopPropagation(); openReportModal('${report.id}')" class="text-blue-600 hover:text-blue-900 mr-3">Ver</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterReports() {
+            const statusFilter = document.getElementById('filterStatus').value;
+            const severityFilter = document.getElementById('filterSeverity').value;
+
+            let filtered = reports;
+            
+            if (statusFilter) {
+                filtered = filtered.filter(r => r.status === statusFilter);
+            }
+            
+            if (severityFilter) {
+                filtered = filtered.filter(r => r.severity === severityFilter);
+            }
+
+            if (filtered.length === 0) {
+                document.getElementById('reportsTable').classList.add('hidden');
+                document.getElementById('noReports').classList.remove('hidden');
+            } else {
+                document.getElementById('noReports').classList.add('hidden');
+                document.getElementById('reportsTable').classList.remove('hidden');
+                renderReports(filtered);
+            }
+        }
+
+        // Create report
+        async function createReport(event) {
+            event.preventDefault();
+
+            const report = {
+                type: document.getElementById('reportType').value,
+                location: document.getElementById('reportLocation').value,
+                severity: document.getElementById('reportSeverity').value,
+                description: document.getElementById('reportDescription').value,
+                operatorEmail: currentUser,
+                status: 'Abierto',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                await db.collection('reports').add(report);
+                alert('Reporte creado exitosamente');
+                document.getElementById('reportType').value = '';
+                document.getElementById('reportLocation').value = '';
+                document.getElementById('reportSeverity').value = '';
+                document.getElementById('reportDescription').value = '';
+                showTab('reports');
+            } catch (error) {
+                console.error('Error creating report:', error);
+                alert('Error al crear el reporte');
+            }
+        }
+
+        // Report modal
+        async function openReportModal(reportId) {
+            currentReportId = reportId;
+            const report = reports.find(r => r.id === reportId);
+            
+            if (!report) return;
+
+            const date = report.createdAt ? new Date(report.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
+            const updatedDate = report.updatedAt ? new Date(report.updatedAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
+            const resolvedDate = report.resolvedAt ? new Date(report.resolvedAt.seconds * 1000).toLocaleString('es-ES') : 'Pendiente';
+
+            document.getElementById('modalContent').innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">ID</p>
+                        <p class="font-medium">${report.id}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Estado</p>
+                        <p class="font-medium">${report.status}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Tipo de Sistema</p>
+                        <p class="font-medium">${report.type}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Ubicación</p>
+                        <p class="font-medium">${report.location}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Severidad</p>
+                        <p class="font-medium">${report.severity}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Operador</p>
+                        <p class="font-medium">${report.operatorEmail}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Fecha de Creación</p>
+                        <p class="font-medium">${date}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Última Actualización</p>
+                        <p class="font-medium">${updatedDate}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-sm text-gray-500">Fecha de Resolución</p>
+                        <p class="font-medium">${resolvedDate}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-sm text-gray-500">Descripción</p>
+                        <p class="font-medium">${report.description}</p>
+                    </div>
+                </div>
+            `;
+
+            // Load comments
+            await loadComments(reportId);
+
+            // Show admin actions if admin
+            if (isAdmin) {
+                document.getElementById('adminActions').classList.remove('hidden');
+                document.getElementById('changeStatus').value = report.status;
+            } else {
+                document.getElementById('adminActions').classList.add('hidden');
+            }
+
+            document.getElementById('reportModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('reportModal').classList.add('hidden');
+            currentReportId = null;
+        }
+
+        // Comments
+        async function loadComments(reportId) {
+            try {
+                const snapshot = await db.collection('comments')
+                    .where('reportId', '==', reportId)
+                    .orderBy('createdAt', 'asc')
+                    .get();
+                
+                const comments = snapshot.docs.map(doc => doc.data());
+                const commentsList = document.getElementById('commentsList');
+                commentsList.innerHTML = '';
+
+                if (comments.length === 0) {
+                    commentsList.innerHTML = '<p class="text-gray-500 text-sm">No hay comentarios</p>';
+                } else {
+                    comments.forEach(comment => {
+                        const date = comment.createdAt ? new Date(comment.createdAt.seconds * 1000).toLocaleString('es-ES') : 'N/A';
+                        const div = document.createElement('div');
+                        div.className = 'bg-gray-50 rounded-lg p-3';
+                        div.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <p class="text-sm font-medium text-gray-800">${comment.authorEmail}</p>
+                                <p class="text-xs text-gray-500">${date}</p>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">${comment.text}</p>
+                        `;
+                        commentsList.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading comments:', error);
+            }
+        }
+
+        async function addComment() {
+            const commentText = document.getElementById('newComment').value.trim();
+            if (!commentText) return;
+
+            try {
+                await db.collection('comments').add({
+                    reportId: currentReportId,
+                    text: commentText,
+                    authorEmail: currentUser,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                document.getElementById('newComment').value = '';
+                await loadComments(currentReportId);
+            } catch (error) {
+                console.error('Error adding comment:', error);
+                alert('Error al agregar comentario');
+            }
+        }
+
+        // Admin actions
+        async function updateReportStatus() {
+            const newStatus = document.getElementById('changeStatus').value;
+            
+            try {
+                const updateData = {
+                    status: newStatus,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                if (newStatus === 'Resuelto' || newStatus === 'Cerrado') {
+                    updateData.resolvedAt = firebase.firestore.FieldValue.serverTimestamp();
+                }
+
+                await db.collection('reports').doc(currentReportId).update(updateData);
+                alert('Estado actualizado exitosamente');
+                closeModal();
+                loadReports();
+            } catch (error) {
+                console.error('Error updating status:', error);
+                alert('Error al actualizar el estado');
+            }
+        }
+
+        async function deleteReport() {
+            if (!confirm('¿Está seguro de eliminar este reporte?')) return;
+
+            try {
+                await db.collection('reports').doc(currentReportId).delete();
+                // Delete associated comments
+                const commentsSnapshot = await db.collection('comments')
+                    .where('reportId', '==', currentReportId)
+                    .get();
+                
+                const batch = db.batch();
+                commentsSnapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+
+                alert('Reporte eliminado exitosamente');
+                closeModal();
+                loadReports();
+            } catch (error) {
+                console.error('Error deleting report:', error);
+                alert('Error al eliminar el reporte');
+            }
+        }
+
+        // Metrics
+        async function loadMetrics() {
+            document.getElementById('loadingMetrics').classList.remove('hidden');
+            document.getElementById('metricsContent').classList.add('hidden');
+
+            try {
+                const snapshot = await db.collection('reports').get();
+                const allReports = snapshot.docs.map(doc => doc.data());
+
+                const total = allReports.length;
+                const open = allReports.filter(r => r.status === 'Abierto').length;
+                const inProgress = allReports.filter(r => r.status === 'En Proceso').length;
+                const resolved = allReports.filter(r => r.status === 'Resuelto' || r.status === 'Cerrado').length;
+                const highSeverity = allReports.filter(r => r.severity === 'Alta').length;
+                const mediumSeverity = allReports.filter(r => r.severity === 'Media').length;
+                const lowSeverity = allReports.filter(r => r.severity === 'Baja').length;
+
+                document.getElementById('metricTotal').textContent = total;
+                document.getElementById('metricOpen').textContent = open;
+                document.getElementById('metricInProgress').textContent = inProgress;
+                document.getElementById('metricResolved').textContent = resolved;
+                document.getElementById('metricHighSeverity').textContent = highSeverity;
+                document.getElementById('metricMediumSeverity').textContent = mediumSeverity;
+                document.getElementById('metricLowSeverity').textContent = lowSeverity;
+
+                document.getElementById('metricsContent').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading metrics:', error);
+                alert('Error al cargar métricas');
+            } finally {
+                document.getElementById('loadingMetrics').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
